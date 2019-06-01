@@ -29,8 +29,8 @@ RUN yum install -y yum-utils; \
 #	Install NGINX and any additional support packages
 #
     yum install -y --setopt=tsflags=nodocs \
-		gettext \
-		nginx-${NGINX_VERSION} \
+        gettext \
+        nginx-${NGINX_VERSION} \
         nginx-module-njs-${NGINX_VERSION} \
         nginx-module-xslt-${NGINX_VERSION} \
 	; \	
@@ -53,7 +53,7 @@ RUN yum install -y yum-utils; \
 #
     if id -u ${NGINX_SVC_NAME} >/dev/null 2>&1; then  \
         groupmod -g ${NGINX_SVC_UID} ${NGINX_SVC_NAME}; \ 
-    	usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} ${NGINX_SVC_NAME}; \
+        usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} ${NGINX_SVC_NAME}; \
     fi; \
 #
 #
