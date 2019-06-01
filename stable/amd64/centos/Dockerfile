@@ -30,9 +30,9 @@ RUN yum install -y yum-utils; \
 #
     yum install -y --setopt=tsflags=nodocs \
         gettext \
-        nginx-${NGINX_VERSION} \
-        nginx-module-njs-${NGINX_VERSION} \
-        nginx-module-xslt-${NGINX_VERSION} \
+        nginx \
+        nginx-module-njs \
+        nginx-module-xslt \
     ; \
 #
 #
