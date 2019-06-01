@@ -33,6 +33,13 @@ RUN yum install -y yum-utils; \
 		nginx-${NGINX_VERSION} \
 	; \	
 #
+#
+#   Install certbot for automatic Let's Encrypt TLS Certificate maintenance
+#
+    yum install epel-release; \
+    yum install httpd mod_ssl python-certbot-nginx; \
+#
+#
 # Do some cleanup to reduce the image load
 #
     yum clean all -y; \
@@ -43,7 +50,7 @@ RUN yum install -y yum-utils; \
 # Create or modify nginx group and service account to use the uid,guid we desire
 #
     if id -u ${NGINX_SVC_NAME} >/dev/null 2>&1; then  \
-	    groupmod -g ${NGINX_SVC_UID} ${NGINX_SVC_NAME}; \ 
+        groupmod -g ${NGINX_SVC_UID} ${NGINX_SVC_NAME}; \ 
     	usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} ${NGINX_SVC_NAME}; \
     fi; \
 #
