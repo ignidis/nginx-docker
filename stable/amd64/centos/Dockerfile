@@ -26,14 +26,14 @@ RUN yum install -y yum-utils; \
     yum -y update && yum -y upgrade; \
 #
 #
-#	Install NGINX and any additional support packages
+# Install NGINX and any additional support packages
 #
     yum install -y --setopt=tsflags=nodocs \
         gettext \
         nginx-${NGINX_VERSION} \
         nginx-module-njs-${NGINX_VERSION} \
         nginx-module-xslt-${NGINX_VERSION} \
-	; \	
+    ; \
 #
 #
 #   Install certbot for automatic Let's Encrypt TLS Certificate maintenance
