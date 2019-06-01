@@ -31,6 +31,8 @@ RUN yum install -y yum-utils; \
     yum install -y --setopt=tsflags=nodocs \
 		gettext \
 		nginx-${NGINX_VERSION} \
+        nginx-module-njs-${NGINX_VERSION} \
+        nginx-module-xslt-${NGINX_VERSION} \
 	; \	
 #
 #
@@ -127,6 +129,10 @@ LABEL summary="Platform for running ${NAME}-${NGINX_SHORT_REPO}-${NGINX_VERSION}
 # Publish the standard web ports
 #
 EXPOSE 8080 8443
+#
+# Publish the mounting points for configuration and the web root
+#
+VOLUME [ "/etc/letsencrypt", "/etc/ssl", "/etc/nginx", "/var/www/" ]
 
 STOPSIGNAL SIGTERM
 
