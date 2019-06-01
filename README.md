@@ -1,4 +1,4 @@
-This is a Dockerfile and a bash build script for the OFFICIAL NGINX ORG Distribution.
+# This is a Dockerfile and a bash build script for the OFFICIAL NGINX ORG Distribution
 
 This can be used as it is for deploying NGINX to a Docker or Openshift environment, or as base image for applications.
 
