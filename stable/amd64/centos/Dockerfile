@@ -38,8 +38,8 @@ RUN yum install -y yum-utils; \
 #
 #   Install certbot for automatic Let's Encrypt TLS Certificate maintenance
 #
-    yum install epel-release; \
-    yum install httpd mod_ssl python-certbot-nginx; \
+    yum install -y epel-release; \
+    yum install -y certbot python2-certbot-nginx; \
 #
 #
 # Do some cleanup to reduce the image load
@@ -54,15 +54,27 @@ RUN yum install -y yum-utils; \
     if id -u ${NGINX_SVC_NAME} >/dev/null 2>&1; then  \
         groupmod -g ${NGINX_SVC_UID} ${NGINX_SVC_NAME}; \ 
         usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} ${NGINX_SVC_NAME}; \
-    fi; \
+    fi; 
 #
 #
-# implement changes required to run NGINX as an unprivileged user
+# Put all the config files in the same area so we can use a volume to make them persistente
+#
+RUN mkdir /etc/nginx/ssl; \
+    cp -dR --preserve=all /etc/ssl /etc/nginx; \
+    rm -rf /etc/ssl; \
+    ln -sf /etc/nginx/ssl /etc/ssl;
+
+RUN mkdir /etc/nginx/letsencrypt; \
+    cp -dR --preserve=all /etc/letsencrypt /etc/nginx; \
+    rm -rf /etc/letsencrypt; \
+    ln -sf /etc/nginx/letsencrypt /etc/letsencrypt;
+#
+# Implement changes required to run NGINX as an unprivileged user
 #
 #
 # Change access to the cache directory
 #
-    chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
+RUN    chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
     chmod -R g+w /var/cache/nginx; \
 #
 #
@@ -128,11 +140,7 @@ LABEL summary="Platform for running ${NAME}-${NGINX_SHORT_REPO}-${NGINX_VERSION}
 #
 # Publish the standard web ports
 #
-EXPOSE 8080 8443
-#
-# Publish the mounting points for configuration and the web root
-#
-VOLUME [ "/etc/letsencrypt", "/etc/ssl", "/etc/nginx", "/var/www/" ]
+EXPOSE 8080
 
 STOPSIGNAL SIGTERM
 
