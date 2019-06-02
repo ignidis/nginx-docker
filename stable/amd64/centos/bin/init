@@ -1,0 +1,10 @@
+#!/bin/sh
+if ! whoami &> /dev/null; then
+    if [ -w /etc/passwd ]; then
+        echo "${USER_NAME:-svcacct}:x:$(id -u):0:${USER_NAME:-svcacct} user:${HOME}:/sbin/nologin" >> /etc/passwd
+    fi
+fi
+if ! [ -e /etc/nginx/nginx.conf ]; then
+    cp -dR --preserve=all etc/nginx/* /etc/nginx/;
+fi
+exec "$@"

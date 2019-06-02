@@ -7,6 +7,7 @@ FROM centos:7
 # Build Time Arguments
 #
 ARG NAME
+ARG APP_ROOT
 ARG NGINX_VERSION
 ARG NGINX_REPO
 ARG NGINX_SHORT_REPO
@@ -53,28 +54,16 @@ RUN yum install -y yum-utils; \
 #
     if id -u ${NGINX_SVC_NAME} >/dev/null 2>&1; then  \
         groupmod -g ${NGINX_SVC_UID} ${NGINX_SVC_NAME}; \ 
-        usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} ${NGINX_SVC_NAME}; \
+        usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} -G root ${NGINX_SVC_NAME}; \
     fi; 
 #
-#
-# Put all the config files in the same area so we can use a volume to make them persistente
-#
-RUN mkdir /etc/nginx/ssl; \
-    cp -dR --preserve=all /etc/ssl /etc/nginx; \
-    rm -rf /etc/ssl; \
-    ln -sf /etc/nginx/ssl /etc/ssl;
-
-RUN mkdir /etc/nginx/letsencrypt; \
-    cp -dR --preserve=all /etc/letsencrypt /etc/nginx; \
-    rm -rf /etc/letsencrypt; \
-    ln -sf /etc/nginx/letsencrypt /etc/letsencrypt;
 #
 # Implement changes required to run NGINX as an unprivileged user
 #
 #
 # Change access to the cache directory
 #
-RUN    chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
+RUN chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
     chmod -R g+w /var/cache/nginx; \
 #
 #
@@ -96,6 +85,51 @@ RUN    chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
 #
     ln -sf /dev/stdout /var/log/nginx/access.log; \
     ln -sf /dev/stderr /var/log/nginx/error.log
+#
+#
+# Put all the config files in the same area so we can use a volume to make them persistent
+#
+RUN mkdir ${APP_ROOT}; \
+#
+# Move SSL Certificates store
+#
+    mkdir /etc/nginx/ssl; \
+    cp -dR --preserve=all /etc/ssl /etc/nginx; \
+    rm -rf /etc/ssl; \
+    ln -sf /etc/nginx/ssl /etc/ssl; \
+#
+# Move Let's Encrypt certbot store
+#
+    mkdir /etc/nginx/letsencrypt; \
+    cp -dR --preserve=all /etc/letsencrypt /etc/nginx; \
+    rm -rf /etc/letsencrypt; \
+    ln -sf /etc/nginx/letsencrypt /etc/letsencrypt; \
+#
+# Save the image configuration to the application folder.
+# This copy is used to initialze a persistent mount if the container detects /etc/nginx is empty
+#
+    mkdir ${APP_ROOT}/etc/; \
+    cp -dR --preserve=all /etc/nginx/ ${APP_ROOT}/etc/;
+#
+#
+# Setup user for build execution and application runtime
+#
+ENV PATH=${APP_ROOT}/bin:${PATH} \
+    HOME=${APP_ROOT}
+
+#
+# Copy container startup script
+#
+COPY bin/init ${APP_ROOT}/bin/
+
+#
+# Ammend the access rights to the configuration areas
+# This will only work if the runtime user is member of the root group - this is the case with openshift
+# In non openshift environment we should do the configuration volume initialization before attaching or make the executing user member of the root group
+#
+RUN chmod -R u+x ${APP_ROOT}/bin && \
+    chgrp -R 0 ${APP_ROOT} && \
+    chmod -R g=u ${APP_ROOT} /etc/nginx /etc/passwd
 
 #
 # Compress the images
@@ -107,6 +141,7 @@ COPY --from=0 / /
 # Build Time Arguments
 #
 ARG NAME
+ARG APP_ROOT
 ARG NGINX_VERSION
 ARG NGINX_REPO
 ARG NGINX_SHORT_REPO
@@ -137,6 +172,9 @@ LABEL summary="Platform for running ${NAME}-${NGINX_SHORT_REPO}-${NGINX_VERSION}
       help="For more information visit https://github.com/ignidis/nginx-docker" \
       usage="s2i build <SOURCE-REPOSITORY> ${NAME}:${NGINX_VERSION}-amd64-centos <APP-NAME>"
 
+
+ENV PATH=${APP_ROOT}/bin:${PATH} HOME=${APP_ROOT}
+
 #
 # Publish the standard web ports
 #
@@ -145,5 +183,7 @@ EXPOSE 8080
 STOPSIGNAL SIGTERM
 
 USER ${NGINX_SVC_UID}
+WORKDIR ${APP_ROOT}
 
+ENTRYPOINT [ "init" ]
 CMD ["nginx", "-g", "daemon off;"]
