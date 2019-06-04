@@ -87,29 +87,47 @@ RUN chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
     ln -sf /dev/stderr /var/log/nginx/error.log
 #
 #
-# Put all the config files in the same area so we can use a volume to make them persistent
+# Create configuration directories under /etc/nginx so that we can use them as mountpoints for persistent configuration
+# This design allows to use either a single mount point for /etc/nginx, or several for each of the subdirectories; this is specially design for the use of
+# config maps under openshift 
+# The entrypoint init script detects if a persistent mount was put on top of /etc/nginx and initializes the mount with the standard image setup, only if it was not already holding a configuration
+# Under openshift config maps can be mounted in /etc/nginx/global.d/ - for the main config files usually stored under /etc/nginx - , /etc/nginx/conf.d/, /etc/nginx/var/ssl, /etc/nginx/var/letsencrypt
+# combined with volume mounts.
+# Usually a combination of maps for /etc/nginx/global.d/ and /etc/nginx/conf.d/ and a single volume for /etc/nginx/var/ would be most effective under openshift; as it combines simplicity of the config maps for doing config changes, whith the simple needs to provide persistence to letsencrypt and the ssl certificates, which are maintained by the automated certbot.
+# Under plain Docker a simple volume on top of /etc/nginx would probably deliver the best results for persistence whith the less overhead
 #
-RUN mkdir ${APP_ROOT}; \
+#
+# Create the base directories
+#
+RUN mkdir -p ${APP_ROOT}; \
+    mkdir -p /etc/nginx/global.d; \
+    mkdir .p /etc/nginx/var; \
+#
+#
+# Move the main configuration to the global.d folder and create the link for the startup code
+#
+    mv /etc/nginx/nginx.conf /etc/nginx/global.d/; \
+    ln -sf /etc/nginx/global.d/nginx.conf /etc/nginx/nginx.conf; \
 #
 # Move SSL Certificates store
 #
-    mkdir /etc/nginx/ssl; \
-    cp -dR --preserve=all /etc/ssl /etc/nginx; \
-    rm -rf /etc/ssl; \
-    ln -sf /etc/nginx/ssl /etc/ssl; \
+    mv /etc/ssl /etc/nginx/var/; \
+    ln -sf /etc/nginx/var/ssl /etc/ssl; \
 #
 # Move Let's Encrypt certbot store
 #
-    mkdir /etc/nginx/letsencrypt; \
-    cp -dR --preserve=all /etc/letsencrypt /etc/nginx; \
-    rm -rf /etc/letsencrypt; \
-    ln -sf /etc/nginx/letsencrypt /etc/letsencrypt; \
+    mv /etc/letsencrypt /etc/nginx/var/; \
+    ln -sf /etc/nginx/var/letsencrypt /etc/letsencrypt; \
 #
 # Save the image configuration to the application folder.
-# This copy is used to initialze a persistent mount if the container detects /etc/nginx is empty
+# This copy is used to initialze a persistent mount if the container detects /etc/nginx or /etc/nginx/var is empty
+# The .has_init_mount flag is used for that purpose
 #
-    mkdir ${APP_ROOT}/etc/; \
-    cp -dR --preserve=all /etc/nginx/ ${APP_ROOT}/etc/;
+    mkdir -p ${APP_ROOT}/etc/; \
+    cp -dR --preserve=all /etc/nginx/ ${APP_ROOT}/etc/; \
+    touch /etc/nginx/.has_init_mount; \
+    touch /etc/nginx/var/.has_init_mount;
+#
 #
 #
 # Setup user for build execution and application runtime

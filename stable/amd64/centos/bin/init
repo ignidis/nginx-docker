@@ -1,10 +1,26 @@
 #!/bin/sh
+#
+# Initialize anonymous user (openshift service account)
+#
 if ! whoami &> /dev/null; then
     if [ -w /etc/passwd ]; then
         echo "${USER_NAME:-svcacct}:x:$(id -u):0:${USER_NAME:-svcacct} user:${HOME}:/sbin/nologin" >> /etc/passwd
     fi
 fi
-if ! [ -e /etc/nginx/nginx.conf ]; then
+#
+#
+# Initialize empty configuration volume mounts (/etc/nginx or /etc/nginx/var)
+#
+if ! [ -e /etc/nginx/.has_init_mount ]; then
     cp -dR --preserve=all etc/nginx/* /etc/nginx/;
+    touch /etc/nginx/.has_init_mount;
+    touch /etc/nginx/var/.has_init_mount;
+elif ! [ -e /etc/nginx/var/.has_init_mount ]; then
+    cp -dR --preserve=all etc/nginx/var/* /etc/nginx/var/;
+    touch /etc/nginx/var/.has_init_mount;
 fi
+#
+#
+# Pass control to main command
+#
 exec "$@"
