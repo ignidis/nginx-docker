@@ -1,5 +1,7 @@
 #!/bin/sh
 #
+#
+#
 # Initialize anonymous user (openshift service account)
 #
 if ! whoami &> /dev/null; then
@@ -7,7 +9,6 @@ if ! whoami &> /dev/null; then
         echo "${USER_NAME:-svcacct}:x:$(id -u):0:${USER_NAME:-svcacct} user:${HOME}:/sbin/nologin" >> /etc/passwd
     fi
 fi
-#
 #
 # Initialize empty configuration volume mounts (/etc/nginx or /etc/nginx/var)
 #
@@ -20,7 +21,6 @@ elif ! [ -e /etc/nginx/var/.has_init_mount ]; then
     touch /etc/nginx/var/.has_init_mount;
 fi
 #
+# Start cron and then continue to the command
 #
-# Pass control to main command
-#
-exec "$@"
+/usr/sbin/crond && exec "$@";

@@ -1,0 +1,3 @@
+#!/bin/sh
+#
+/usr/bin/certbot --nginx --config-dir /etc/letsencrypt/etc --work-dir /etc/letsencrypt/run --logs-dir /etc/letsencrypt/log $*

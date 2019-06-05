@@ -40,7 +40,11 @@ RUN yum install -y yum-utils; \
 #   Install certbot for automatic Let's Encrypt TLS Certificate maintenance
 #
     yum install -y epel-release; \
-    yum install -y certbot python2-certbot-nginx; \
+    yum install -y --setopt=tsflags=nodocs\
+        certbot \
+        python2-certbot-nginx \
+        cronie \
+    ; \
 #
 #
 # Do some cleanup to reduce the image load
@@ -54,7 +58,7 @@ RUN yum install -y yum-utils; \
 #
     if id -u ${NGINX_SVC_NAME} >/dev/null 2>&1; then  \
         groupmod -g ${NGINX_SVC_UID} ${NGINX_SVC_NAME}; \ 
-        usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} -G root ${NGINX_SVC_NAME}; \
+        usermod  -u ${NGINX_SVC_UID} -g ${NGINX_SVC_NAME} -G root,wheel ${NGINX_SVC_NAME}; \
     fi; 
 #
 #
@@ -81,12 +85,6 @@ RUN chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
     sed -i "/^http {/a \    proxy_temp_path /var/cache/nginx/proxy_temp;\n    client_body_temp_path /var/cache/nginx/client_temp;\n    fastcgi_temp_path /var/cache/nginx/fastcgi_temp;\n    uwsgi_temp_path /var/cache/nginx/uwsgi_temp;\n    scgi_temp_path /var/cache/nginx/scgi_temp;\n" /etc/nginx/nginx.conf; \
 #
 #
-# forward request and error logs to docker log collector
-#
-    ln -sf /dev/stdout /var/log/nginx/access.log; \
-    ln -sf /dev/stderr /var/log/nginx/error.log
-#
-#
 # Create configuration directories under /etc/nginx so that we can use them as mountpoints for persistent configuration
 # This design allows to use either a single mount point for /etc/nginx, or several for each of the subdirectories; this is specially design for the use of
 # config maps under openshift 
@@ -99,9 +97,16 @@ RUN chown -R ${NGINX_SVC_UID}:0 /var/cache/nginx; \
 #
 # Create the base directories
 #
-RUN mkdir -p ${APP_ROOT}; \
+    mkdir -p ${APP_ROOT}; \
     mkdir -p /etc/nginx/global.d; \
-    mkdir .p /etc/nginx/var; \
+    mkdir -p /etc/nginx/var; \
+    mkdir -p /etc/letsencrypt/run; \
+    mkdir -p /etc/letsencrypt/log; \
+    mkdir -p /etc/letsencrypt/etc; \
+    mkdir -p /etc/letsencrypt/live; \
+    rm -f /etc/ssl/certs; \
+    mkdir -p /etc/ssl/certs; \
+    mkdir -p /etc/ssl/private; \
 #
 #
 # Move the main configuration to the global.d folder and create the link for the startup code
@@ -117,7 +122,50 @@ RUN mkdir -p ${APP_ROOT}; \
 # Move Let's Encrypt certbot store
 #
     mv /etc/letsencrypt /etc/nginx/var/; \
-    ln -sf /etc/nginx/var/letsencrypt /etc/letsencrypt; \
+    ln -sf /etc/nginx/var/letsencrypt /etc/letsencrypt \
+    ;
+#
+#
+#
+# Setup runtime variables
+#
+ENV PATH=${APP_ROOT}/bin:${PATH} \
+    HOME=${APP_ROOT}
+
+#
+# Copy container startup script, certbot wrapper and certificate renewal scheduler
+#
+COPY bin/ ${APP_ROOT}/bin/
+COPY var/ ${APP_ROOT}/var/
+
+#
+# Ammend the access rights to the configuration areas
+# This will only work if the runtime user is member of the root group - this is the case with openshift
+# In non openshift environment we should do the configuration volume initialization before attaching or make the executing user member of the root group
+#
+RUN rm -rf /var/log/*; \
+#
+#
+# forward request and error logs to docker log collector
+#
+    mkdir -p /var/log/nginx; \
+    ln -sf /dev/stdout /var/log/nginx/access.log; \
+    ln -sf /dev/stderr /var/log/nginx/error.log; \
+#
+#
+# create the cron job for the Let's Encrypt certificate renewal it must run as root
+#
+    crontab ${APP_ROOT}/var/spool/certbot; \
+#
+#
+# add permisions to the application init scripts and the certbot wrapper
+# in addition allow the non root user to insert the anonymous openshift user if we want to use it
+# and ensure we can read the config files
+#
+    chmod -R u+x ${APP_ROOT}/bin && \
+    chgrp -R 0 ${APP_ROOT} && \
+    chmod -R g=u ${APP_ROOT} /etc/nginx /etc/passwd \
+    ; \
 #
 # Save the image configuration to the application folder.
 # This copy is used to initialze a persistent mount if the container detects /etc/nginx or /etc/nginx/var is empty
@@ -126,29 +174,9 @@ RUN mkdir -p ${APP_ROOT}; \
     mkdir -p ${APP_ROOT}/etc/; \
     cp -dR --preserve=all /etc/nginx/ ${APP_ROOT}/etc/; \
     touch /etc/nginx/.has_init_mount; \
-    touch /etc/nginx/var/.has_init_mount;
+    touch /etc/nginx/var/.has_init_mount \
+    ;
 #
-#
-#
-# Setup user for build execution and application runtime
-#
-ENV PATH=${APP_ROOT}/bin:${PATH} \
-    HOME=${APP_ROOT}
-
-#
-# Copy container startup script
-#
-COPY bin/init ${APP_ROOT}/bin/
-
-#
-# Ammend the access rights to the configuration areas
-# This will only work if the runtime user is member of the root group - this is the case with openshift
-# In non openshift environment we should do the configuration volume initialization before attaching or make the executing user member of the root group
-#
-RUN chmod -R u+x ${APP_ROOT}/bin && \
-    chgrp -R 0 ${APP_ROOT} && \
-    chmod -R g=u ${APP_ROOT} /etc/nginx /etc/passwd
-
 #
 # Compress the images
 #
@@ -183,6 +211,7 @@ LABEL summary="Platform for running ${NAME}-${NGINX_SHORT_REPO}-${NGINX_VERSION}
       io.k8s.display-name="NGINX-${NGINX_SHORT_REPO}-${NGINX_VERSION}" \
       io.openshift.expose-services="8080:http" \
       io.openshift.expose-services="8443:https" \
+      io.openshift.expose-services="9080:http-localhost" \
       io.openshift.tags="builder,${NAME},${NAME}-${NGINX_SHORT_REPO}-${NGINX_VERSION}" \
       name="${NAME}" \
       version="${NGINX_VERSION}-amd64-centos" \
@@ -190,13 +219,21 @@ LABEL summary="Platform for running ${NAME}-${NGINX_SHORT_REPO}-${NGINX_VERSION}
       help="For more information visit https://github.com/ignidis/nginx-docker" \
       usage="s2i build <SOURCE-REPOSITORY> ${NAME}:${NGINX_VERSION}-amd64-centos <APP-NAME>"
 
+#
+# the cron demon must run as root, seting the setuid bit ensures it does even started as non privileged
+# the image copy seems to destroy the setuid flag, thus doing this after compresion
+#
+RUN chmod 4755 /usr/sbin/crond;
 
+#
+# we must ensure our certbot and init scripts are found in the right place and search order
+#
 ENV PATH=${APP_ROOT}/bin:${PATH} HOME=${APP_ROOT}
 
 #
-# Publish the standard web ports
+# Publish the standard web ports (http,https,http-localhost)
 #
-EXPOSE 8080
+EXPOSE 8080 8443 9080
 
 STOPSIGNAL SIGTERM
 
