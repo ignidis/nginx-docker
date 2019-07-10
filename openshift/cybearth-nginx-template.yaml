@@ -1,0 +1,408 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: cybearth-nginx
+  namespace: cybearth
+  labels:
+    app: nginx
+  annotations:
+    description: "This template creates all openshift items required to run the cybearth nginx service"
+    iconClass: "icon-nginx"
+    tags: "webserver"
+parameters:
+- name: VOLUME_CAPACITY
+  displayName: "Volume Capacity"
+  description: "Volume space available for the local www root, e.g. 512Mi, 2Gi."
+  value: "10Gi"
+  required: true
+objects:
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: etc-nginx-claim
+    namespace: cybearth
+    labels:
+      app: nginx
+    annotations:
+      volume.alpha.kubernetes.io/storage-class: glusterfs-storage
+  spec:
+    storageClassName: glusterfs-storage
+    accessModes:
+    - ReadWriteMany 
+    resources:
+     requests:
+       storage: 128Mi
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: var-www-nginx-claim
+    namespace: cybearth
+    labels:
+      app: nginx
+    annotations:
+      volume.alpha.kubernetes.io/storage-class: glusterfs-storage
+  spec:
+    storageClassName: glusterfs-storage
+    accessModes:
+    - ReadWriteMany 
+    resources:
+     requests:
+       storage: ${VOLUME_CAPACITY}
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: etc-nginx-global.d
+    namespace: cybearth
+    labels:
+      app: nginx
+  data:
+    letsencrypt.conf: |2-
+      # RSA certificate
+      ssl_certificate /etc/letsencrypt/etc/live/www.cybearth.net/fullchain.pem;
+      ssl_certificate_key /etc/letsencrypt/etc/live/www.cybearth.net/privkey.pem;
+    nginx.conf: >-
+      worker_processes 
+      1;                                                                                                                                                                    
+                                                                                                                                                                                              
+      error_log  /var/log/nginx/error.log
+      warn;                                                                                                                                               
+
+      pid       
+      /var/cache/nginx/nginx.pid;                                                                                                                                                  
+                                                                                                                                                                                              
+                                                                                                                                                                                              
+      events
+      {                                                                                                                                                                                
+          worker_connections  1024;                                                                                                                                                           
+      }                                                                                                                                                                                       
+                                                                                                                                                                                              
+                                                                                                                                                                                              
+      http
+      {
+          proxy_temp_path /var/cache/nginx/proxy_temp;                                                                                                                                        
+          client_body_temp_path /var/cache/nginx/client_temp;                                                                                                                                 
+          fastcgi_temp_path /var/cache/nginx/fastcgi_temp;                                                                                                                                    
+          uwsgi_temp_path /var/cache/nginx/uwsgi_temp;                                                                                                                                        
+          scgi_temp_path /var/cache/nginx/scgi_temp;                                                                                                                                          
+                                                                                                                                                                                              
+          include       /etc/nginx/mime.types;                                                                                                                                                
+          default_type  application/octet-stream;                                                                                                                                             
+                                                                                                                                                                                              
+          log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '                                                                                                           
+                            '$status $body_bytes_sent "$http_referer" '                                                                                                                       
+                            '"$http_user_agent" "$http_x_forwarded_for"';                                                                                                                     
+                                                                                                                                                                                              
+          access_log  /var/log/nginx/access.log  main;                                                                                                                                        
+                                                                                                                                                                                              
+          sendfile        on;                                                                                                                                                                 
+          #tcp_nopush     on;                                                                                                                                                                 
+                                                                                                                                                                                              
+          keepalive_timeout  65;                                                                                                                                                              
+                                                                                                                                                                                              
+          #gzip  on;                                                                                                                                                                          
+                                                                                                                                                                                              
+          include /etc/nginx/conf.d/*.conf;                                                                                                                                                   
+
+          ###########################################################################
+          #
+          # Let's Encrypt authentication plugin
+          #
+          ###########################################################################
+          include /etc/letsencrypt/etc/le_http_01_*.conf;
+          server_names_hash_bucket_size 128;
+          ###########################################################################
+      }
+    self-signed.conf: |-
+      ssl_certificate /etc/ssl/certs/nginx-selfsigned.crt;
+      ssl_certificate_key /etc/ssl/private/nginx-selfsigned.key;
+    ssl-params.conf: >-
+      ssl_protocols TLSv1.2;
+
+      ssl_prefer_server_ciphers on;
+
+      ssl_dhparam /etc/ssl/certs/dhparam.pem;
+
+      ssl_ciphers
+      ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+
+      ssl_ecdh_curve secp384r1; # Requires nginx >= 1.1.0
+
+      ssl_session_timeout  10m;
+
+      ssl_session_cache shared:SSL:10m;
+
+      ssl_session_tickets off; # Requires nginx >= 1.5.9
+
+      # ssl_stapling on; # Requires nginx >= 1.3.7
+
+      # ssl_stapling_verify on; # Requires nginx => 1.3.7
+
+      resolver 8.8.8.8 8.8.4.4 valid=300s;
+
+      resolver_timeout 5s;
+
+      add_header X-Frame-Options DENY;
+
+      add_header X-Content-Type-Options nosniff;
+
+      add_header X-XSS-Protection "1; mode=block";
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: etc-nginx-conf.d
+    namespace: cybearth
+    labels:
+      app: nginx
+  data:
+    cybearth.net.conf: |
+      ## After Certbot initialization remove all ##
+      ##server {
+      ##    listen 8443 ssl;
+      ##    listen [::]:8443 ssl;
+
+      ##    server_name www.cybearth.net svn.cybearth.net hades.cybearth.net openshift.cybearth.net cloud.cybearth.net;
+
+      ##    root /var/www/cybearth.net/html;
+      ##    index index.html;
+
+          # RSA Certificates
+          # include global.d/self-signed.conf;
+      ##    include global.d/letsencrypt.conf;
+
+          # TLS Parameters
+      ##    include global.d/ssl-params.conf;
+          # include /etc/letsencrypt/etc/options-ssl-nginx.conf;
+          
+      ##    location /svn {
+      ##        proxy_pass http://sessrumnir.asgard.unix.dmz.cybearth.net/svn/;
+      ##    }
+      ##}
+
+      server {
+          listen 8080;
+          listen [::]:8080;
+
+          server_name www.cybearth.net svn.cybearth.net hades.cybearth.net openshift.cybearth.net cloud.cybearth.net;
+
+          location = /wpad.dat {
+              root /var/www/cybearth.net/html;
+          }
+          location = /robots.txt {
+              root /var/www/cybearth.net/html;
+          }
+          location / {
+              # return 301 https://$server_name$request_uri;
+              return 400;
+          }
+      }
+
+      ##server {
+      ##    listen 7007 ssl;
+      ##    listen [::]:7007 ssl;
+
+      ##    server_name svn.cybearth.net;
+
+          # RSA Certificates
+          # include global.d/self-signed.conf;
+      ##    include global.d/letsencrypt.conf;
+
+          # TLS Parameters
+      ##    include global.d/ssl-params.conf;
+          # include /etc/letsencrypt/etc/options-ssl-nginx.conf;
+          
+      ##    location / {
+      ##        proxy_pass http://sessrumnir.asgard.unix.dmz.cybearth.net/;
+      ##    }
+      ##}
+    default.conf: >-
+      server
+      {                                                                                                                                                                                
+          listen       9080;                                                                                                                                                                  
+          server_name  localhost;                                                                                                                                                             
+                                                                                                                                                                                              
+          #charset koi8-r;                                                                                                                                                                    
+          #access_log  /var/log/nginx/host.access.log  main;                                                                                                                                  
+                                                                                                                                                                                              
+          location / {                                                                                                                                                                        
+              root   /usr/share/nginx/html;                                                                                                                                                   
+              index  index.html index.htm;                                                                                                                                                    
+          }                                                                                                                                                                                   
+                                                                                                                                                                                              
+          #error_page  404              /404.html;                                                                                                                                            
+                                                                                                                                                                                              
+          # redirect server error pages to the static page /50x.html                                                                                                                          
+          #                                                                                                                                                                                   
+          error_page   500 502 503 504  /50x.html;                                                                                                                                            
+          location = /50x.html {                                                                                                                                                              
+              root   /usr/share/nginx/html;                                                                                                                                                   
+          }                                                                                                                                                                                   
+                                                                                                                                                                                              
+          # proxy the PHP scripts to Apache listening on 127.0.0.1:80                                                                                                                         
+          #                                                                                                                                                                                   
+          #location ~ \.php$ {                                                                                                                                                                
+          #    proxy_pass   http://127.0.0.1;                                                                                                                                                 
+          #}                                                                                                                                                                                  
+                                                                                                                                                                                              
+          # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000                                                                                                                
+          #                                                                                                                                                                                   
+          #location ~ \.php$ {                                                                                                                                                                
+          #    root           html;                                                                                                                                                           
+          #    fastcgi_pass   127.0.0.1:9000;                                                                                                                                                 
+          #    fastcgi_index  index.php;                                                                                                                                                      
+          #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;                                                                                                                  
+          #    include        fastcgi_params;                                                                                                                                                 
+          #}                                                                                                                                                                                  
+                                                                                                                                                                                              
+          # deny access to .htaccess files, if Apache's document root                                                                                                                         
+          # concurs with nginx's one                                                                                                                                                          
+          #                                                                                                                                                                                   
+          #location ~ /\.ht {                                                                                                                                                                 
+          #    deny  all;                                                                                                                                                                     
+          #}                                                                                                                                                                                  
+      }
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    name: nginx
+    namespace: cybearth
+    labels:
+      app: nginx
+  spec:
+    replicas: 1
+    selector:
+      app: nginx
+      deploymentconfig: nginx
+    strategy:
+      activeDeadlineSeconds: 21600
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          app: nginx
+          deploymentconfig: nginx
+      spec:
+        containers:
+          - image: >-
+              docker-registry.default.svc:5000/cybearth/nginx
+            imagePullPolicy: Always
+            lifecycle:
+              preStop:
+                exec:
+                  command:
+                    - /usr/sbin/nginx
+                    - '-s'
+                    - quit
+            livenessProbe:
+              failureThreshold: 3
+              initialDelaySeconds: 20
+              periodSeconds: 10
+              successThreshold: 1
+              tcpSocket:
+                port: 9080
+              timeoutSeconds: 1
+            name: nginx
+            ports:
+              - containerPort: 9080
+                protocol: TCP
+            readinessProbe:
+              failureThreshold: 3
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              successThreshold: 1
+              tcpSocket:
+                port: 9080
+              timeoutSeconds: 1
+            resources: {}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+            volumeMounts:
+              - mountPath: /etc/nginx/global.d
+                name: vol-etc-nginx-global-d
+              - mountPath: /etc/nginx/conf.d
+                name: vol-etc-nginx-conf-d
+              - mountPath: /etc/nginx/var/
+                name: vol-etc-nginx-var
+              - mountPath: /var/www
+                name: vol-var-www
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+          - configMap:
+              defaultMode: 420
+              name: etc-nginx-global.d
+            name: vol-etc-nginx-global-d
+          - configMap:
+              defaultMode: 420
+              name: etc-nginx-conf.d
+            name: vol-etc-nginx-conf-d
+          - name: vol-etc-nginx-var
+            persistentVolumeClaim:
+              claimName: etc-nginx-claim
+          - name: vol-var-www
+            persistentVolumeClaim:
+              claimName: var-www-nginx-claim
+    test: false
+    triggers:
+      - type: ConfigChange
+      - imageChangeParams:
+          automatic: true
+          containerNames:
+            - nginx
+          from:
+            kind: ImageStreamTag
+            name: 'nginx:1.16.0-amd64-centos'
+            namespace: cybearth
+          lastTriggeredImage: >-
+            docker-registry.default.svc:5000/cybearth/nginx
+        type: ImageChange
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: nginx
+    namespace: cybearth
+  spec:
+    type: LoadBalancer
+    ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+    - port: 7007
+      targetPort: 7007
+      protocol: TCP
+      name: svn
+    - port: 9080
+      targetPort: 9080
+      protocol: TCP
+      name: localhost
+    selector:
+      app: nginx
+      deploymentconfig: nginx
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: nginx
+    namespace: cybearth
+  spec:
+    host: nginx.os.cybearth.net
+    port:
+      targetPort: localhost
+    to:
+      kind: Service
+      name: nginx
+
+
