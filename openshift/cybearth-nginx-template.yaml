@@ -108,7 +108,7 @@ objects:
           # Let's Encrypt authentication plugin
           #
           ###########################################################################
-          include /etc/letsencrypt/etc/le_http_01_*.conf;
+          #include /etc/letsencrypt/etc/le_http_01_*.conf;
           server_names_hash_bucket_size 128;
           ###########################################################################
       }
@@ -184,6 +184,14 @@ objects:
 
           server_name www.cybearth.net svn.cybearth.net hades.cybearth.net openshift.cybearth.net cloud.cybearth.net;
 
+        # This section is used to respond to the letsencrypt challenges during certificate renewal
+        # If you are afraid of someone spotting your user hash you should activate only during renewal and deactivate thereafter
+        # or you can limit to specific clients, etc
+
+       ##   location ~ ^/.well-known/acme-challenge/(.*)$ {
+       ##     default_type text/plain;
+       ##     return 200 $1.here_comes_your_letsencrypt_user_hash;
+       ##   }
           location = /wpad.dat {
               root /var/www/cybearth.net/html;
           }
