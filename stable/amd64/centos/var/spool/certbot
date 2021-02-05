@@ -1,1 +1,1 @@
-0 12 * * * /opt/www/bin/certbot renew --quiet
+0 12 * * * root /opt/www/bin/certbot renew --quiet >> /var/log/cron.log 2>&1

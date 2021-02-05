@@ -10,44 +10,75 @@ metadata:
     iconClass: "icon-nginx"
     tags: "webserver"
 parameters:
-- name: VOLUME_CAPACITY
-  displayName: "Volume Capacity"
+- name: WWW_VOLUME_CAPACITY
+  displayName: "WWW Volume Capacity"
   description: "Volume space available for the local www root, e.g. 512Mi, 2Gi."
-  value: "10Gi"
+  value: "50Gi"
+  required: true
+- name: CONFIG_VOLUME_CAPACITY
+  displayName: "Config Volume Capacity"
+  description: "Volume space available for the local configuration including let'sencrypt certificates and keys, e.g. 512Mi, 2Gi."
+  value: "5Gi"
   required: true
 objects:
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: pv-cybdonas-ospvnfs-var-www-nginx
+    labels:
+      app: nginx
+  spec:
+    storageClassName: cybdonas-nfs-storage
+    capacity:
+      storage: ${WWW_VOLUME_CAPACITY}
+    accessModes:
+      - ReadWriteOnce
+    nfs:
+      path: /volume2/osPVNFS-var-www-nginx
+      server: cybdonas.cybearth.net
+    persistentVolumeReclaimPolicy: Retain
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: pv-cybdonas-ospvnfs-etc-nginx
+    labels:
+      app: nginx
+  spec:
+    storageClassName: cybdonas-nfs-storage
+    capacity:
+      storage: ${CONFIG_VOLUME_CAPACITY}
+    accessModes:
+      - ReadWriteOnce
+    nfs:
+      path: /volume2/osPVNFS-etc-nginx
+      server: cybdonas.cybearth.net
+    persistentVolumeReclaimPolicy: Retain
 - apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
     name: etc-nginx-claim
-    namespace: cybearth
     labels:
       app: nginx
-    annotations:
-      volume.alpha.kubernetes.io/storage-class: glusterfs-storage
   spec:
-    storageClassName: glusterfs-storage
+    storageClassName: cybdonas-nfs-storage
     accessModes:
-    - ReadWriteMany 
+    - ReadWriteOnce 
     resources:
      requests:
-       storage: 128Mi
+       storage: ${CONFIG_VOLUME_CAPACITY}
 - apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
     name: var-www-nginx-claim
-    namespace: cybearth
     labels:
       app: nginx
-    annotations:
-      volume.alpha.kubernetes.io/storage-class: glusterfs-storage
   spec:
-    storageClassName: glusterfs-storage
+    storageClassName: cybdonas-nfs-storage
     accessModes:
-    - ReadWriteMany 
+    - ReadWriteOnce 
     resources:
      requests:
-       storage: ${VOLUME_CAPACITY}
+       storage: ${WWW_VOLUME_CAPACITY}
 - apiVersion: v1
   kind: ConfigMap
   metadata:
