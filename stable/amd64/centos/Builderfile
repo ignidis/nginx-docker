@@ -158,7 +158,9 @@ RUN rm -rf /var/log/*; \
 #
 # create the cron job for the Let's Encrypt certificate renewal it must run as root
 #
-    crontab ${APP_ROOT}/var/spool/certbot; \
+    cp ${APP_ROOT}/var/spool/certbot /etc/cron.d/certbot; \
+    chmod 0644 /etc/cron.d/certbot; \
+    touch /var/log/crond.log; \
 #
 #
 # add permisions to the application init scripts and the certbot wrapper
